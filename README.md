@@ -1,6 +1,6 @@
 ### README del Repositori
 
-# TFG-Matemàtiques
+# TFG Grau en Matemàtiques - Lluís Boscà
 
 Aquest repositori conté el codi utilitzat en el Treball de Fi de Grau titulat "Models de predicció de mortalitat basats en models ocults de Màrkov Bayesians" del Grau en Matemàtiques de la Universitat de València. Inclou implementacions en R i NIMBLE per als models desenvolupats en les seccions de Metodologia i Resultats del treball, com ara models de regressió, models de barreja i models ocults de Màrkov (HMM).
 
