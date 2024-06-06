@@ -1,0 +1,167 @@
+---
+title: "MOMO - Model Lineal + Fourier"
+output:
+  html_document: default
+  pdf_document: default
+date: "2024-04-19"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+## Càrrega de dades i llibreries
+
+```{r}
+library(ggplot2)
+library(nimble)
+library(MCMCvis)
+library(dplyr)
+library(lubridate)
+```
+
+```{r}
+# Carreguem les dades des de l'arxiu RDS
+dades_momo <- readRDS("momo_selected_data_no2324.rds")
+
+dades_momo_si2324 <- readRDS("momo_selected_data_si2324.rds")
+
+# Generem les dates per a 2023 i els quatre primers mesos de 2024
+dates_2324 <- seq(ymd("2023-01-01"), ymd("2024-04-30"), by = "day")
+dates_2324 <- dates_2324[!(month(dates_2324) == 2 & day(dates_2324) == 29)]
+
+# Creem un tibble amb les dates i els valors NA per a "defunciones_observadas"
+new_data <- tibble(
+  fecha_defuncion = dates_2324,
+  defunciones_observadas = NA
+)
+
+# Afegim les noves dades a la tibble original
+dades_momo <- bind_rows(dades_momo, new_data)
+rm(dates_2324,new_data)
+
+# Agafem la columna de les defuncions
+y <- dades_momo$defunciones_observadas
+```
+
+## Definició i execució del model
+
+```{r}
+codi_lin_fourier <- nimbleCode({
+    # Priors
+    beta0 ~ dnorm(0, sd = 1000)
+    betaL ~ dnorm(0, sd = 1000)
+    
+    alphaF ~ dnorm(0, sd = 1000)
+    betaF ~ dnorm(0, sd = 1000)
+    
+    sigma ~ dunif(0.001, 100)
+    
+    
+    # Likelihood
+    for(t in 1:length(y)) {
+        mu.y[t] <- beta0 + betaL*t + 
+          alphaF * cos(2 * piVal *  yDay[t] / 365) + 
+          betaF * sin(2 * piVal *  yDay[t] / 365)
+        
+        y[t] ~ dnorm(mu.y[t], sd = sigma)
+    }
+    
+    for (t in 1:length(y)){
+      y_pstr[t] ~ dnorm(mu.y[t], sd = sigma)
+    }
+})
+
+yD <- c(rep(1:365, 9), 1:120)
+
+start_time <- Sys.time()
+
+mcmc_output <- nimbleMCMC(codi_lin_fourier, data = list(y = y, yDay = yD),
+                           constants = list(piVal = pi),
+                           monitors = c("beta0", "alphaF", "betaF", "betaL", "y_pstr"), 
+                           niter = 10000,
+                           nburnin = 1000,
+                           thin = 4,
+                           nchains = 2)
+
+end_time <- Sys.time()
+
+temps_comp <- end_time - start_time
+
+print(temps_comp)
+```
+
+## Visualització de resultats
+
+### Resum de dades
+
+```{r}
+MCMCplot(mcmc_output, params = c("beta0", "betaL", "alphaF", "betaF"))
+MCMCtrace(mcmc_output, pdf = FALSE, params = c("beta0", "betaL", "alphaF", "betaF"))
+MCMCsummary(mcmc_output, params = c("beta0", "betaL", "alphaF", "betaF"))
+```
+
+### Gràfica
+
+```{r}
+# Posterior i bandes de y_pstr
+quant1 <- function(x) {
+  q1 <- quantile(x,0.025)
+  return(as.numeric(q1))
+}
+
+quant3 <- function(x) {
+  q3 <- quantile(x,0.975)
+  return(as.numeric(q3))
+}
+
+y_pstr <- unlist(MCMCpstr(mcmc_output, params = "y_pstr"))
+y_est_q1 <- unlist(MCMCpstr(mcmc_output, params = "y_pstr", func = quant1))
+y_est_q3 <- unlist(MCMCpstr(mcmc_output, params = "y_pstr", func = quant3))
+
+y_est <- c(y_pstr[1:2920], rep(NA, length(y)-2920))
+y_pred <- c(rep(NA, 2920), y_pstr[2921:length(y_pstr)])
+
+dades_pstr <- dades_momo_si2324
+dades_pstr$y_est <- y_est
+dades_pstr$y_pred <- y_pred
+dades_pstr$y_est_q1 <- y_est_q1
+dades_pstr$y_est_q3 <- y_est_q3
+
+# Gràfica de dades i línia de regressió + intervals de credibilitat
+ggplot(data = dades_pstr, aes(x = fecha_defuncion, y = defunciones_observadas)) +
+  geom_point(color = "brown3") +
+  geom_line(aes(y = y_est), color = "blue", linewidth = 1) +
+  geom_line(aes(y = y_pred), color = "green", linewidth = 1) +
+  geom_ribbon(aes(ymin = y_est_q1, ymax = y_est_q3),alpha = 0.3) +
+  labs(x = "Data de Registre", y = "Nombre de Morts") +
+  ggtitle("Model Lineal Harmònic") + # Títol
+  scale_x_date(date_breaks = "1 year", date_labels = "%Y") +
+  theme(plot.title = element_text(hjust = 0.5, face = "bold"))
+```
+
+```{r}
+ggsave("model-lineal-harmonic-1sincos.pdf")
+```
+
+```{r}
+# Càlcul de la MSE (EQM - Error Quadràtic Mitjà) - d'ADJUST
+df1 <- dades_pstr[year(dades_pstr$fecha_defuncion) <= 2022, ]
+
+EQM <- mean((df1$defunciones_observadas - df1$y_est)^2)
+
+cat("Obtenim un error quadràtic mitjà d'adjust de EQM =", EQM)
+```
+
+
+```{r}
+# Càlcul de la MSE (EQM - Error Quadràtic Mitjà) - de PREDICCIÓ
+df2 <- dades_pstr[year(dades_pstr$fecha_defuncion) > 2022, ]
+
+EQMP <- mean((df2$defunciones_observadas - df2$y_pred)^2)
+
+cat("Obtenim un error quadràtic mitjà de predicció de EQMP =", EQMP)
+```
+
+
