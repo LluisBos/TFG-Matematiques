@@ -1,0 +1,331 @@
+---
+title: "MOMO - Model Mixtures - Predicció Online"
+output: html_document
+date: "2024-04-19"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+## Càrrega de dades i llibreries
+
+```{r}
+library(ggplot2)
+library(nimble)
+library(MCMCvis)
+library(dplyr)
+library(lubridate)
+```
+
+```{r}
+# Carreguem les dades des de l'arxiu RDS
+dades_momo <- readRDS("momo_selected_data_si2324.rds")
+
+# Generar les dates per als tres primers mesos de 2024
+dates_2324 <- seq(ymd("2023-01-01"), ymd("2024-04-30"), by = "day")
+dates_2324 <- dates_2324[!(month(dates_2324) == 2 & day(dates_2324) == 29)]
+```
+
+## Definició del model, valors inicials i funcions necessàries
+
+```{r}
+# Definim el model
+codi_mixtures <- nimbleCode({
+    # Priors
+    beta0 ~ dnorm(0, sd = 1000)
+    betaL ~ dnorm(0, sd = 1000)
+    
+    for (i in 1:2){
+      alphaF[i] ~ dnorm(0, sd = 1000)
+      betaF[i] ~ dnorm(0, sd = 1000)
+      betaM[i] ~ dgamma(0.1, 0.1)
+    }  
+    
+    for (i in 1:6){
+      betaS[i] ~ dnorm(0, sd = 1000)
+    }
+    
+    sigma ~ dunif(0.001, 100)
+    probs[1:3] ~ ddirch(alphas[1:3])
+    
+    for (t in 1:length(y)){
+      Z[t] ~ dcat(probs[1:3])
+    }
+    
+    
+    # Likelihood
+    for(t in 1:length(y)) {
+       mu.y[t] <- beta0 + betaL*t +
+         betaM[1] * step(Z[t]-2) +
+         betaM[2] * step(Z[t]-3) +
+         betaS[1]*DL[t] + betaS[2]*DM[t] + betaS[3]*DX[t] +
+         betaS[4]*DJ[t] + betaS[5]*DV[t] + betaS[6]*DS[t] +
+         alphaF[1] * cos(2 * piVal *  yDay[t] / 365) +
+         betaF[1] * sin(2 * piVal *  yDay[t] / 365) +
+         alphaF[2] * cos(4 * piVal *  yDay[t] / 365) +
+         betaF[2] * sin(4 * piVal *  yDay[t] / 365)
+         
+       y[t] ~ dnorm(mu.y[t], sd = sigma)
+    }
+    
+    for (t in 1:length(y)){
+      y_pstr[t] ~ dnorm(mu.y[t], sd = sigma)
+    }
+})
+
+## VALORS INICIALS
+# Importem mitjanes del model sense predicció i les emprem com a valors inicials
+initials <- readRDS("means-mixtures-inits.rds")
+Z_mod_est <- as.numeric(initials$Z)
+initials <- initials[names(initials) != "Z"]
+
+
+
+# Creem funcions necesàries per després
+Mode <- function(x, na.rm = FALSE) {
+  if(na.rm){
+    x = x[!is.na(x)]
+  }
+
+  ux <- unique(x)
+  return(ux[which.max(tabulate(match(x, ux)))])
+}
+
+FreqRelativ1 <- function(x) {
+  f <- table(x) / length(x)
+  return(ifelse(is.na(f['1']), 0, f['1']))
+}
+
+FreqRelativ2 <- function(x) {
+  f <- table(x) / length(x)
+  return(ifelse(is.na(f['2']), 0, f['2']))
+}
+
+FreqRelativ3 <- function(x) {
+  f <- table(x) / length(x)
+  return(ifelse(is.na(f['3']), 0, f['3']))
+}
+
+quant1 <- function(x) {
+  q1 <- quantile(x,0.025)
+  return(as.numeric(q1))
+}
+
+quant3 <- function(x) {
+  q3 <- quantile(x,0.975)
+  return(as.numeric(q3))
+}
+```
+
+## Execució del model (predicció online)
+
+```{r}
+# Comprovar si existeix la carpeta on guardaré les execucions
+dir_path <- "EXEC-MIXTURES2"
+if (!dir.exists(dir_path)) {
+  dir.create(dir_path)
+}
+
+
+iter = floor(length(dates_2324) / 7)
+
+dies_rest <- length(dates_2324) - iter*7
+
+temps_comp <- rep(NA, iter)
+EQMP <- rep(NA, iter)
+
+# Si no es la execució primera, carregar vector EQMP i temps_comp
+ini <- 38
+
+if (ini > 1) {
+  file_path <- paste0(dir_path, "/mcmc_pstr_mixt_temps_EQMP_", ini-1, ".rds")
+  
+  if (file.exists(file_path)) {
+    data_anterior <- readRDS(file_path)
+    temps_comp <- data_anterior[[1]]
+    EQMP<- data_anterior[[2]]
+  }
+}
+
+for (i in ini:iter) {
+  # PREPARACIO DADES
+  
+  # Seleccionem les dades de entrenament (comencem només 2022, després afegim setmana a setmana)
+  df <- head(dades_momo, 2920 + (i - 1) * 7)
+  
+  # Afegim una setmana nova, amb tot NA
+  if (i < iter){
+    n1 <- 1 + (i - 1) * 7
+    n2 <- 7 * i
+    new_data <- tibble(
+      fecha_defuncion = dates_2324[n1:n2],
+      defunciones_observadas = NA
+    )
+  } else{ # En este cas afegim una setmana + els 2 dies que queden (en total 9 dies)
+    n1 <- 1 + (iter - 1) * 7
+    n2 <- 7 * iter + dies_rest
+    new_data <- tibble(
+      fecha_defuncion = dates_2324[n1:n2],
+      defunciones_observadas = NA
+    )
+  }
+  
+  df <- bind_rows(df, new_data)
+  
+  # Crear dies de la setmana
+  df <- df %>%
+  mutate(DL = as.numeric(wday(fecha_defuncion) == 1),
+         DM = as.numeric(wday(fecha_defuncion) == 2),
+         DX = as.numeric(wday(fecha_defuncion) == 3),
+         DJ = as.numeric(wday(fecha_defuncion) == 4),
+         DV = as.numeric(wday(fecha_defuncion) == 5),
+         DS = as.numeric(wday(fecha_defuncion) == 6))
+  
+  # Agafem el vector de les defuncions
+  y <- df$defunciones_observadas
+  
+  l_y <- length(y)
+  
+  # EXECUCIO DEL MODEL
+  
+  # Crear vectors amb numero de dia del any
+  if (l_y < 3285) {
+    ndays <- l_y-365*8
+    yD <- c(rep(1:365, 8), 1:ndays)
+  } else {
+    ndays <- l_y-365*9
+    yD <- c(rep(1:365, 9), 1:ndays)
+  }
+  
+  # Generem valors inicials per a Z[t]
+  Z_ini <- head(Z_mod_est, 2920 + (i - 1) * 7) # Guardem moda del entrenament
+  # Semana de predicció valors aleatoris
+  if (i < iter){
+    Z_rnd <- sample(1:3, 7, replace = TRUE)
+  } else {
+    Z_rnd <- sample(1:3, 7+dies_rest, replace = TRUE)
+  }
+  initials$Z <- NA # Borrem valors anteriors
+  initials$Z <- c(Z_ini, Z_rnd)  
+  
+  # Nimble MCMC
+  start_time <- Sys.time()
+  
+  mcmc_output <- nimbleMCMC(codi_mixtures, data = list(y = y, yDay = yD, DL = df$DL, DM = df$DM, DX = df$DX, DJ = df$DJ, DV = df$DV, DS = df$DS, alphas = c(1/2, 1/2, 1/2)),
+                           constants = list(piVal = pi),
+                           inits = initials,
+                           monitors = c("beta0", "betaL", "alphaF", "betaF", "betaS", "betaM",
+                                        "probs", "Z", "y_pstr"), 
+                           niter = 10000,
+                           nburnin = 4000,
+                           thin = 4,
+                           nchains = 2)
+  
+  end_time <- Sys.time()
+
+  # Guardar el temps (en SEGONS)
+  temps_comp[i] <- as.numeric(difftime(end_time, start_time, units = "secs"))
+  
+  # GUARDEM SUMMARY de les pstr dels paràmetres
+  resum_dades <- MCMCsummary(mcmc_output, params = c("beta0", "betaL", "alphaF", "betaF", "betaS", "betaM", "probs"))
+  
+  
+  # Generació del nom del fitxer dinàmicament
+  file_name1 <- paste0(dir_path, "/mcmc_pstr_mixt_summ_", i, ".rds")
+  
+  # Guardar el summary en un arxiu RDS
+  saveRDS(resum_dades, file = file_name1)
+  
+  # Guardar la Z: guardem moda i freqüència relativa de cada valor
+  # Obtenim la Moda
+  Z_est_moda <- unlist(MCMCpstr(mcmc_output, params = "Z", func = Mode))
+  # Obtenim les freqüències relatives
+  Z_freqrel_1 <- unlist(MCMCpstr(mcmc_output, params = "Z", func = FreqRelativ1))
+  Z_freqrel_2 <- unlist(MCMCpstr(mcmc_output, params = "Z", func = FreqRelativ2))
+  Z_freqrel_3 <- unlist(MCMCpstr(mcmc_output, params = "Z", func = FreqRelativ3))
+  # Guardem tot en una llista
+  Z_summ <- list(moda = Z_est_moda, freqrel1 = Z_freqrel_1, freqrel2 = Z_freqrel_2, freqrel3 = Z_freqrel_3)
+  # Guardem en arxiu
+  file_name2 <- paste0(dir_path, "/mcmc_pstr_mixt_Z_", i, ".rds")
+  saveRDS(Z_summ, file = file_name2)
+  
+  ## GUARDEM APROXIMACIONS DE LA ULTIMA SETMANA PER TAL DE FER GRÀFICA
+  # Guardar aproximació i IC
+  y_est <- unlist(MCMCpstr(mcmc_output, params = "y_pstr"))
+  y_est_q1 <- unlist(MCMCpstr(mcmc_output, params = "y_pstr", func = quant1))
+  y_est_q3 <- unlist(MCMCpstr(mcmc_output, params = "y_pstr", func = quant3))
+  
+  # Copiar el dataframe df mantenint només la columna "fecha_defuncion"
+  y_pstr_df <- df %>% select(fecha_defuncion)
+  
+  # Afegir les noves columnes
+  y_pstr_df <- y_pstr_df %>%
+    mutate(
+      y_est = y_est,
+      y_est_q1 = y_est_q1,
+      y_est_q3 = y_est_q3
+    )
+  
+  # Seleccionar els últims K dies i 
+  if (i < iter){
+    K <- 7
+  } else {
+    K <- 7 + dies_rest
+  }
+  
+  if (i > 1)
+  {
+    y_pstr_df <- tail(y_pstr_df, K)
+    filename_y <- paste0(dir_path, "/mcmc_pstr_mixt_y_", i-1, ".rds")
+    y_pstr_df_old <- readRDS(filename_y)
+    y_pstr_df_comb <- bind_rows(y_pstr_df_old, y_pstr_df)
+  } else
+  {
+    y_pstr_df_comb <- y_pstr_df
+  }
+  filename_y_s <- paste0(dir_path, "/mcmc_pstr_mixt_y_", i, ".rds")
+  saveRDS(y_pstr_df_comb ,file = filename_y_s)
+    
+  # Càlcul del EQM - de PREDICCIÓ (valors de la última setmana)
+  if (i < iter){
+    y_estimades <- tail(y_est,7)
+    df2 <- tail(head(dades_momo, 2920+i*7),7)
+    y_real <- df2$defunciones_observadas
+  } else {
+    dd <- 7 + dies_rest
+    y_estimades <- tail(y_est, dd)
+    df2 <- tail(dades_momo, dd)
+    y_real <- df2$defunciones_observadas
+  }
+  
+  EQMP[i] <- mean((y_real - y_estimades)^2)
+  
+  EQMP_temps_llista <- list(temps_comp = temps_comp, EQMP = EQMP)
+  
+   # Generació del nom del fitxer dinàmicament
+  file_name3 <- paste0(dir_path, "/mcmc_pstr_mixt_temps_EQMP_", i, ".rds")
+  
+  # Guardar temps exec. i EQMP en un arxiu RDS
+  saveRDS(EQMP_temps_llista, file = file_name3)
+  
+  # Mostrar el missatge d'execució finalitzada
+  cat(sprintf("EXECUCIÓ %d ACABADA\n", i))
+}
+
+EQMP_total <- sum(EQMP, na.rm = TRUE)
+temps_total <- sum(temps_comp, na.rm = TRUE)
+
+# Convertir el temps total en una duració lubridate
+duracio <- seconds_to_period(temps_total)
+
+# Mostrar el temps total d'execució separat en hores, minuts i segons
+cat(sprintf("Temps total d'execució: %02d hores, %02d minuts, %02d segons\n",
+            floor(hour(duracio)), floor(minute(duracio)), floor(second(duracio))))
+
+# Mostrar el valor de EQMP_total
+cat(sprintf("Valor de EQMP_total: %.4f\n", EQMP_total))
+```
+
+

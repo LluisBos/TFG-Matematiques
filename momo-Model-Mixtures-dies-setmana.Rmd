@@ -1,0 +1,193 @@
+---
+title: "MOMO - Model Mixtures - 2"
+output: html_document
+date: "2024-04-19"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+## Càrrega de dades i llibreries
+
+```{r}
+library(ggplot2)
+library(nimble)
+library(MCMCvis)
+library(dplyr)
+library(lubridate)
+
+options(lubridate.week.start = 1) # Fer que la setmana comence en dilluns
+```
+
+```{r}
+# Carreguem les dades des de l'arxiu RDS
+dades_momo <- readRDS("momo_selected_data_no2324.rds")
+
+# Agregar les dummy variables de Dilluns a Dissabte
+dades_momo <- dades_momo %>%
+  mutate(DL = as.numeric(wday(fecha_defuncion) == 1),
+         DM = as.numeric(wday(fecha_defuncion) == 2),
+         DX = as.numeric(wday(fecha_defuncion) == 3),
+         DJ = as.numeric(wday(fecha_defuncion) == 4),
+         DV = as.numeric(wday(fecha_defuncion) == 5),
+         DS = as.numeric(wday(fecha_defuncion) == 6))
+
+# Agafem la columna de les defuncions
+y <- dades_momo$defunciones_observadas
+```
+
+## Definició i execució del model
+
+```{r}
+codi_mixtures <- nimbleCode({
+    # Priors
+    beta0 ~ dnorm(0, sd = 1000)
+    betaL ~ dnorm(0, sd = 1000)
+    
+    for (i in 1:2){
+      alphaF[i] ~ dnorm(0, sd = 1000)
+      betaF[i] ~ dnorm(0, sd = 1000)
+      betaM[i] ~ dgamma(0.1, 0.1)
+    }
+    
+    for (i in 1:6){
+      betaS[i] ~ dnorm(0, sd = 1000)
+    }
+    
+    sigma ~ dunif(0.001, 100)
+    probs[1:3] ~ ddirch(alphas[1:3])
+    
+    for (t in 1:length(y)){
+      Z[t] ~ dcat(probs[1:3])
+    }
+    
+    
+    # Likelihood
+
+    for(t in 1:length(y)) {
+       mu.y[t] <- beta0 + betaL*t +
+         betaM[1] * step(Z[t]-2) +
+         betaM[2] * step(Z[t]-3) +
+         betaS[1]*DL[t] + betaS[2]*DM[t] + betaS[3]*DX[t] +
+         betaS[4]*DJ[t] + betaS[5]*DV[t] + betaS[6]*DS[t] +
+         alphaF[1] * cos(2 * piVal *  yDay[t] / 365) +
+         betaF[1] * sin(2 * piVal *  yDay[t] / 365) +
+         alphaF[2] * cos(4 * piVal *  yDay[t] / 365) +
+         betaF[2] * sin(4 * piVal *  yDay[t] / 365)
+         
+       y[t] ~ dnorm(mu.y[t], sd = sigma)
+    }
+    
+    for (t in 1:length(y)){
+      y_pstr[t] ~ dnorm(mu.y[t], sd = sigma)
+    }
+
+})
+
+yD <- rep(1:365, 8)
+
+start_time <- Sys.time()
+
+mcmc_output <- nimbleMCMC(codi_mixtures, data = list(y = y, yDay = yD, alphas = c(1/2, 1/2, 1/2), DL = dades_momo$DL, DM = dades_momo$DM, DX = dades_momo$DX, DJ = dades_momo$DJ, DV = dades_momo$DV, DS = dades_momo$DS),
+                           constants = list(piVal = pi),
+                           monitors = c("beta0", "alphaF", "betaF", "betaL", "betaM", "betaS", "probs", "Z", "y_pstr"), 
+                           niter = 10000,
+                           nburnin = 3000,
+                           thin = 4,
+                           nchains = 2)
+
+end_time <- Sys.time()
+
+temps_comp <- end_time - start_time
+
+print(temps_comp)
+```
+
+## Visualització de resultats
+
+### Resum de dades
+
+```{r}
+MCMCplot(mcmc_output, params = c("beta0", "betaL", "alphaF", "betaF", "betaM", "betaS", "probs"))
+MCMCtrace(mcmc_output, pdf = FALSE, params = c("beta0", "betaL", "alphaF", "betaF", "betaM", "betaS", "probs"))
+MCMCsummary(mcmc_output, params = c("beta0", "betaL", "alphaF", "betaF", "betaM", "betaS", "probs"))
+```
+
+```{r}
+# Guardem mitjanes dels paràmetres per posar d'inicials en altre codi
+means_pstr <- MCMCpstr(mcmc_output, params = c("beta0", "betaL", "alphaF", "betaF", "betaS", "betaM", "probs"))
+
+saveRDS(means_pstr, file = "means-mixtures-inits.rds")
+```
+
+
+
+```{r}
+# Creem funció moda (valor més freqüent)
+Mode <- function(x, na.rm = FALSE) {
+  if(na.rm){
+    x = x[!is.na(x)]
+  }
+
+  ux <- unique(x)
+  return(ux[which.max(tabulate(match(x, ux)))])
+}
+
+quant1 <- function(x) {
+  q1 <- quantile(x,0.025)
+  return(as.numeric(q1))
+}
+
+quant3 <- function(x) {
+  q3 <- quantile(x,0.975)
+  return(as.numeric(q3))
+}
+
+beta0_est <- as.numeric(MCMCpstr(mcmc_output, params = "beta0"))
+betaL_est <- as.numeric(MCMCpstr(mcmc_output, params = "betaL"))
+
+alphaF_est <- unlist(MCMCpstr(mcmc_output, params = "alphaF"))
+betaF_est <- unlist(MCMCpstr(mcmc_output, params = "betaF"))
+betaM_est <- unlist(MCMCpstr(mcmc_output, params = "betaM"))
+
+t_vect = 1:length(y)
+
+y0_est <- beta0_est + betaL_est*t_vect + 
+                  alphaF_est[1]*cos(2*pi*yD/365) + 
+                  betaF_est[1]*sin(2*pi*yD/365) + 
+                  alphaF_est[2]*cos(4*pi*yD/365) + 
+                  betaF_est[2]*sin(4*pi*yD/365)
+
+y_est <- unlist(MCMCpstr(mcmc_output, params = "y_pstr"))
+
+y_est_q1 <- unlist(MCMCpstr(mcmc_output, params = "y_pstr", func = quant1))
+y_est_q3 <- unlist(MCMCpstr(mcmc_output, params = "y_pstr", func = quant3))
+
+
+dades_pstr <- dades_momo
+dades_pstr$y0_est <- y0_est
+dades_pstr$y_est <- y_est
+dades_pstr$y_est_q1 <- y_est_q1
+dades_pstr$y_est_q3 <- y_est_q3
+
+ggplot(dades_pstr, aes(x = fecha_defuncion)) +
+  geom_point(aes(y = defunciones_observadas), color = "brown4") +
+  geom_line(aes(y = y0_est), color = "blue", linewidth = 1) +
+  geom_line(aes(y = y_est), color = "green", linewidth = 1) +
+  geom_ribbon(aes(ymin = y_est_q1, ymax = y_est_q3),alpha = 0.3) +
+  labs(x = "Data de Registre", y = "Nombre de Morts") +  # Etiquetes dels eixos
+  ggtitle("Model Mixtures G3") + # Títol
+  scale_x_date(date_breaks = "1 year", date_labels = "%Y") + # Mostrar cada any a l'eix x
+  theme(plot.title = element_text(hjust = 0.5, face = "bold")) # Centrar el títol
+
+```
+
+```{r}
+# Càlcul de la MSE (EQM - Error Quadràtic Mitjà)
+MSE <- mean((dades_pstr$defunciones_observadas - dades_pstr$y_est)^2)
+
+cat("Obtenim un error quadràtic mitjà de EQM =", MSE)
+```
+

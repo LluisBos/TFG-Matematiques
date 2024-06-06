@@ -1,0 +1,71 @@
+---
+title: "Momo - Tidy Data"
+output: html_document
+date: "2024-04-19"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+# Neteja dades MOMO
+
+```{r}
+library(tidyverse)
+```
+
+```{r}
+# Carregar el .csv sencer
+momo_data_all <- read_csv("momo_04-05.csv")
+
+# Filtrar les dades per a la sèrie de tota la població
+momo_data_all_poblacio <- subset(momo_data_all, ambito == "nacional" & cod_sexo == "all" & cod_gedad == "all")
+
+# Seleccionar només les columnes de fecha_defuncion i defunciones_observadas
+momo_select <- subset(momo_data_all_poblacio, select = c(fecha_defuncion, defunciones_observadas))
+
+# Passar a format Date del paquet Lubridate
+momo_select$fecha_defuncion <- ymd(momo_select$fecha_defuncion)
+
+# Filtrar i llevar les files corresponents als 29 de Febrer
+momo_select <- momo_select %>% 
+  filter(!(month(fecha_defuncion) == 2 & day(fecha_defuncion) == 29))
+
+# Llevar els anys 2023 i 2024
+momo_select_no2324 <- momo_select[year(momo_select$fecha_defuncion) <= 2022, ]
+
+# Esborrar dades innecessàries
+rm(momo_data_all)
+rm(momo_data_all_poblacio)
+
+# Guardar les dades en un arxiu .RDS (R Data Store)
+saveRDS(momo_select_no2324, file = "momo_selected_data_no2324.rds")
+
+# Guardem també unes dades amb 2023 i 2024, però només fins abril de 2023 (últim més complet).
+momo_select_si2324 <- momo_select %>%
+  filter(year(fecha_defuncion) < 2024 | (year(fecha_defuncion) == 2024 & month(fecha_defuncion) <= 4))
+
+# Guardar les dades en un arxiu .RDS (R Data Store)
+saveRDS(momo_select_si2324, file = "momo_selected_data_si2324.rds")
+```
+
+## Visualització de les dades
+
+
+```{r}
+# Crear la gràfica amb 2023 i 2024 emprant ggplot2 amb punts
+ggplot(data = momo_select_si2324, aes(x = fecha_defuncion, y = defunciones_observadas)) +
+  geom_point(color = "brown3") +
+  labs(x = "Data de Registre", y = "Nombre de Morts") +  # Etiquetes dels eixos
+  geom_vline(xintercept = as.numeric(as.Date("2023-01-01")), linetype = "dashed", color = "dimgrey", linewidth = 0.9) +
+  ggtitle("Morts diàries observades al llarg del temps (2015-2024)", subtitle = "Font: ISCII") +  # Títol de la gràfica
+  scale_x_date(date_breaks = "1 year", date_labels = "%Y") + # Mostrar cada any a l'eix x
+  theme(plot.title = element_text(face = "bold"))  # Centrar i posar en negreta el títol
+```
+
+
+```{r}
+ggsave("grafica-dades-momo.pdf", width = 10, height = 7)
+```
+
