@@ -1,5 +1,5 @@
 ---
-title: "MOMO - Model Mixtures - 2"
+title: "MOMO - Model Mixtures + Dies Setmana (NoPred)"
 output: html_document
 date: "2024-04-19"
 ---
@@ -122,7 +122,7 @@ means_pstr <- MCMCpstr(mcmc_output, params = c("beta0", "betaL", "alphaF", "beta
 saveRDS(means_pstr, file = "means-mixtures-inits.rds")
 ```
 
-
+### Gràfica
 
 ```{r}
 # Creem funció moda (valor més freqüent)
@@ -184,10 +184,12 @@ ggplot(dades_pstr, aes(x = fecha_defuncion)) +
 
 ```
 
+## Càlcul error quadràtic
+
 ```{r}
-# Càlcul de la MSE (EQM - Error Quadràtic Mitjà)
+# Càlcul del EQM (Error Quadràtic Mitjà) d'ajust
 MSE <- mean((dades_pstr$defunciones_observadas - dades_pstr$y_est)^2)
 
-cat("Obtenim un error quadràtic mitjà de EQM =", MSE)
+cat("Obtenim un error quadràtic mitjà d'ajust de EQM =", MSE)
 ```
 
