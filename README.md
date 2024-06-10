@@ -24,3 +24,4 @@ Aquest repositori conté el codi utilitzat en el Treball de Fi de Grau titulat "
 - **momo-Mixtures-Setmana-OnlinePred**: Implementació de la predicció online model de barreja independent.
 - **momo-HMM-DiesSetmana.Rmd**: Implementació d'un model ocult de Màrkov (HMM) sense predicció.
 - **momo-HMM-Setmana-OnlinePred.Rmd**: Implementació de la predicció online del HMM.
+- **visual-dades-online.Rmd**: Script per a l'anàlisi i visualització dels resultats de les prediccions online.
