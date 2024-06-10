@@ -122,7 +122,7 @@ MCMCtrace(mcmc_output, pdf = FALSE, params = c("beta0", "betaL", "alphaF", "beta
 MCMCsummary(mcmc_output, params = c("beta0", "betaL", "alphaF", "betaF", "betaS"))
 ```
 
-### Gràfica
+### Gràfiques i errors quadràtics
 
 ```{r}
 # Posterior i bandes de y_pstr
@@ -173,7 +173,7 @@ ggsave("grafica-setmanal-bloc-general.pdf", width = 10, height = 7)
 
 
 ```{r}
-# Càlcul de la MSE (EQM - Error Quadràtic Mitjà) - d'ADJUST
+# Càlcul del EQM (Error Quadràtic Mitjà) - d'ajust
 df1 <- dades_pstr[year(dades_pstr$fecha_defuncion) <= 2022, ]
 
 EQM <- mean((df1$defunciones_observadas - df1$y_est)^2)
@@ -210,14 +210,11 @@ ggsave("grafica-setmanal-bloc-detall.pdf", width = 10, height = 7)
 
 
 ```{r}
-# Càlcul de la MSE (EQM - Error Quadràtic Mitjà) - de PREDICCIÓ
+# Càlcul del EQMP (Error Quadràtic Mitjà de Predicció)
 df2 <- dades_pstr[year(dades_pstr$fecha_defuncion) > 2022, ]
 
 EQMP <- mean((df2$defunciones_observadas - df2$y_pred)^2)
 
 cat("Obtenim un error quadràtic mitjà de predicció de EQMP =", EQMP)
 ```
-
-
-
 
