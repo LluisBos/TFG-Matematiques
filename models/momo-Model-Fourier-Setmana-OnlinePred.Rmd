@@ -1,5 +1,5 @@
 ---
-title: "MOMO - Model Mixtures - 2"
+title: "MOMO - Model Fourier + Dies Setmana (Predicció online)"
 output: html_document
 date: "2024-04-19"
 ---
@@ -27,6 +27,8 @@ dades_momo <- readRDS("momo_selected_data_si2324.rds")
 dates_2324 <- seq(ymd("2023-01-01"), ymd("2024-04-30"), by = "day")
 dates_2324 <- dates_2324[!(month(dates_2324) == 2 & day(dates_2324) == 29)]
 ```
+
+## Definició del model
 
 ```{r}
 # Definim el model
@@ -77,6 +79,8 @@ quant3 <- function(x) {
 }
 ```
 
+
+## Predicció online
 
 ```{r}
 # Comprovar si existeix la carpeta on guardaré les execucions
@@ -259,5 +263,4 @@ cat(sprintf("Temps total d'execució: %02d hores, %02d minuts, %02d segons\n",
 # Mostrar el valor de EQMP_total
 cat(sprintf("Valor de EQMP_total: %.4f\n", EQMP_total))
 ```
-
 
