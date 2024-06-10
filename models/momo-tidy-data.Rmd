@@ -42,7 +42,7 @@ rm(momo_data_all_poblacio)
 # Guardar les dades en un arxiu .RDS (R Data Store)
 saveRDS(momo_select_no2324, file = "momo_selected_data_no2324.rds")
 
-# Guardem també unes dades amb 2023 i 2024, però només fins abril de 2023 (últim més complet).
+# Guardem també unes dades amb 2023 i 2024, però només fins abril de 2024 (últim més complet).
 momo_select_si2324 <- momo_select %>%
   filter(year(fecha_defuncion) < 2024 | (year(fecha_defuncion) == 2024 & month(fecha_defuncion) <= 4))
 
