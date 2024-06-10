@@ -158,12 +158,12 @@ ggsave("grafica-lineal-harmonic.pdf", width = 10, height = 7)
 ## Càlcul errors quadràtics
 
 ```{r}
-# Càlcul del EQM (Error Quadràtic Mitjà) - d'adjust
+# Càlcul del EQM (Error Quadràtic Mitjà) - d'ajust
 df1 <- dades_pstr[year(dades_pstr$fecha_defuncion) <= 2022, ]
 
 EQM <- mean((df1$defunciones_observadas - df1$y_est)^2)
 
-cat("Obtenim un error quadràtic mitjà d'adjust de EQM =", EQM)
+cat("Obtenim un error quadràtic mitjà d'ajust de EQM =", EQM)
 ```
 
 ```{r}
