@@ -1,0 +1,427 @@
+---
+title: "Momo - Tidy Data"
+output: html_document
+date: "2024-04-19"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+# Neteja dades MOMO
+
+```{r}
+library(tidyverse)
+```
+
+
+### MODEL AMB TENDENCIES SETMANALS
+```{r}
+temps_EQMP_setm <- readRDS("EXEC-SETMANA-2/mcmc_pstr_temps_EQMP_69.rds")
+EQMP_setm <- temps_EQMP_setm$EQMP
+temps_setm <- temps_EQMP_setm$temps_comp
+
+EQMP_total <- sum(EQMP_setm)
+temps_total <- sum(temps_setm)
+
+# Convertir el temps total en una duració lubridate
+duracio <- seconds_to_period(temps_total)
+temps_mean <- seconds_to_period(mean(temps_setm))
+
+# Mostrar el temps total d'execució separat en hores, minuts i segons
+cat(sprintf("Temps total d'execució: %02d hores, %02d minuts, %02d segons\n",
+            floor(hour(duracio)), floor(minute(duracio)), floor(second(duracio))))
+
+cat(sprintf("Mitjana de temps d'execució per iteració: %02d hores, %02d minuts, %02d segons\n",
+            floor(hour(temps_mean)), floor(minute(temps_mean)), floor(second(temps_mean))))
+
+# Mostrar el valor de EQMP_total
+cat(sprintf("Valor de EQMP_total: %.4f\n", EQMP_total))
+```
+
+### MIXTURES
+```{r}
+temps_EQMP_mixt <- readRDS("EXEC-MIXTURES2/mcmc_pstr_mixt_temps_EQMP_69.rds")
+
+EQMP_mixt <- temps_EQMP_mixt$EQMP
+temps_mixt <- temps_EQMP_mixt$temps_comp
+
+EQMP_mixt_total <- sum(EQMP_mixt)
+temps_mixt_total <- sum(temps_mixt)
+
+# Convertir el temps total en una duració lubridate
+duracio_mixt <- seconds_to_period(temps_mixt_total)
+temps_mixt_mean <- seconds_to_period(mean(temps_mixt))
+
+# Mostrar el temps total d'execució separat en hores, minuts i segons
+cat(sprintf("Temps total d'execució: %02d hores, %02d minuts, %02d segons\n",
+            floor(hour(duracio_mixt)), floor(minute(duracio_mixt)), floor(second(duracio_mixt))))
+
+cat(sprintf("Mitjana de temps d'execució per iteració: %02d hores, %02d minuts, %02d segons\n",
+            floor(hour(temps_mixt_mean)), floor(minute(temps_mixt_mean)), floor(second(temps_mixt_mean))))
+
+# Mostrar el valor de EQMP_total
+cat(sprintf("Valor de EQMP_total: %.4f\n", EQMP_mixt_total))
+```
+
+### HMM
+```{r}
+temps_EQMP_hmm <- readRDS("EXEC-HMM2/mcmc_pstr_hmm_temps_EQMP_69.rds")
+
+EQMP_hmm <- temps_EQMP_hmm$EQMP
+temps_hmm <- temps_EQMP_hmm$temps_comp
+
+EQMP_hmm_total <- sum(EQMP_hmm)
+temps_hmm_total <- sum(temps_hmm)
+
+# Convertir el temps total en una duració lubridate
+duracio_hmm <- seconds_to_period(temps_hmm_total)
+temps_hmm_mean <- seconds_to_period(mean(temps_hmm))
+
+# Convertir els dies a hores i sumar amb les hores
+total_hours <- day(duracio_hmm) * 24 + hour(duracio_hmm)
+
+# Mostrar el temps total d'execució separat en hores, minuts i segons
+cat(sprintf("Temps total d'execució: %02d hores, %02d minuts, %02d segons\n",
+            floor(total_hours), floor(minute(duracio_hmm)), floor(second(duracio_hmm))))
+
+cat(sprintf("Mitjana de temps d'execució per iteració: %02d hores, %02d minuts, %02d segons\n",
+            floor(hour(temps_hmm_mean)), floor(minute(temps_hmm_mean)), floor(second(temps_hmm_mean))))
+
+# Mostrar el valor de EQMP_total
+cat(sprintf("Valor de EQMP_total: %.4f\n", EQMP_hmm_total))
+```
+
+
+Codi comprovar Rhat < 1.1
+
+```{r}
+# Establir el límit de Rhat
+limit_Rhat <- 1.1
+
+# Inicialitzar un vector buit per guardar les execucions amb Rhat >= limit_Rhat
+execucions_alt_Rhat <- c()
+
+# Definir el patró del nom del fitxer
+file_pattern1 <- "EXEC-MIXTURES2/mcmc_pstr_mixt_summ_"
+file_pattern2 <- "EXEC-SETMANA/mcmc_pstr_summ_"
+file_pattern3 <- "EXEC-SETMANA-2/mcmc_pstr_summ_"
+file_pattern4 <- "EXEC-HMM2/mcmc_pstr_hmm_summ_"
+
+file_pattern <- file_pattern4
+
+# Iterar de 1 a 69
+for (i in 1:69) {
+  # Generar el nom del fitxer
+  file_name <- paste0(file_pattern, i, ".rds")
+  
+  # Carregar el fitxer en una variable temporal
+  vec <- readRDS(file_name)
+  
+  # Comprovar si hi ha algun valor de Rhat major o igual a limit_Rhat
+  if (any(vec$Rhat >= limit_Rhat)) {
+    # Si és així, guardar el número de l'execució
+    execucions_alt_Rhat <- c(execucions_alt_Rhat, i)
+  }
+}
+
+# Mostrar les execucions amb Rhat >= limit_Rhat o missatge si no se'n troba cap
+if (length(execucions_alt_Rhat) > 0) {
+  print(execucions_alt_Rhat)
+} else {
+  print(paste("No s'ha trobat cap valor de Rhat major o igual a", limit_Rhat, "en cap execució."))
+}
+```
+
+Codi comprovar que n_eff >= 200
+
+```{r}
+# Establir el límit per a n.eff
+limit_n_eff <- 200
+
+# Inicialitzar un vector buit per guardar les execucions amb n.eff < limit_n_eff
+execucions_baix_n_eff <- c()
+
+# Definir el patró del nom del fitxer
+file_pattern1 <- "EXEC-MIXTURES2/mcmc_pstr_mixt_summ_"
+file_pattern2 <- "EXEC-SETMANA/mcmc_pstr_summ_"
+file_pattern3 <- "EXEC-SETMANA-2/mcmc_pstr_summ_"
+file_pattern4 <- "EXEC-HMM2/mcmc_pstr_hmm_summ_"
+
+file_pattern <- file_pattern4
+
+# Iterar de 1 a 69
+for (i in 1:69) {
+  # Generar el nom del fitxer
+  file_name <- paste0(file_pattern, i, ".rds")
+  
+  # Carregar el fitxer en una variable temporal
+  vec <- readRDS(file_name)
+  
+  # Comprovar si hi ha algun valor de n.eff menor que limit_n_eff
+  if (any(vec$n.eff < limit_n_eff)) {
+    # Si és així, guardar el número de l'execució
+    execucions_baix_n_eff <- c(execucions_baix_n_eff, i)
+  }
+}
+
+# Mostrar les execucions amb n.eff < limit_n_eff o missatge si no se'n troba cap
+if (length(execucions_baix_n_eff) > 0) {
+  print(execucions_baix_n_eff)
+} else {
+  print(paste("No s'ha trobat cap valor de n.eff menor que", limit_n_eff, "en cap execució."))
+}
+```
+## PLOTS
+
+Plot de setmanal
+
+```{r}
+df_est <- readRDS("EXEC-SETMANA-2/mcmc_pstr_y_69.rds")
+df1 <- readRDS("momo_selected_data_si2324.rds")
+df_est$defunciones_observadas <- df1$defunciones_observadas
+
+y_pstr <- df_est$y_est
+df_est <- df_est %>% select(-y_est)
+
+y_est <- c(y_pstr[1:2920], rep(NA, length(y_pstr)-2920))
+y_pred <- c(rep(NA, 2920), y_pstr[2921:length(y_pstr)])
+
+df_est$y_est <- y_est
+df_est$y_pred <- y_pred
+
+# Gràfica de dades i línia de regressió + intervals de credibilitat
+ggplot(data = df_est, aes(x = fecha_defuncion, y = defunciones_observadas)) +
+  geom_point(color = "brown3") +
+  geom_line(aes(y = y_est), color = "blue", linewidth = 1) +
+  geom_line(aes(y = y_pred), color = "green", linewidth = 1) +
+  geom_ribbon(aes(ymin = y_est_q1, ymax = y_est_q3), alpha = 0.3) +
+  labs(
+    x = "Data de Registre", 
+    y = "Nombre de Morts",
+    title = "Model amb Tendències Setmanals",
+    subtitle = "Predicció online"
+  ) +
+  scale_x_date(date_breaks = "1 year", date_labels = "%Y") +
+  theme(
+    plot.title = element_text(face = "bold")
+  )
+```
+
+```{r}
+ggsave("grafica-setmanal-online-general.pdf", width = 10, height = 7)
+```
+
+
+Gràfica en detall predicció
+
+```{r}
+df_detall <- df_est %>%
+  filter(year(fecha_defuncion) %in% c(2023,2024))
+
+ggplot(data = df_detall, aes(x = fecha_defuncion, y = defunciones_observadas)) +
+  geom_point(color = "brown3") +
+  geom_line(aes(y = y_est), color = "blue", linewidth = 1) +
+  geom_line(aes(y = y_pred), color = "green", linewidth = 1) +
+  geom_ribbon(aes(ymin = y_est_q1, ymax = y_est_q3), alpha = 0.3) +
+  labs(
+    x = "Data de Registre", 
+    y = "Nombre de Morts",
+    title = "Model amb Tendències Setmanals",
+    subtitle = "Predicció online (Detall 2023-2024)"
+  ) +
+  scale_x_date(date_breaks = "2 months", date_labels = "%m/%y") +
+  theme(
+    plot.title = element_text(face = "bold")
+  )
+```
+
+```{r}
+ggsave("grafica-setmanal-online-detall.pdf", width = 10, height = 7)
+```
+
+### Plot mixtures
+
+```{r}
+df_est <- readRDS("EXEC-MIXTURES2/mcmc_pstr_mixt_y_69.rds")
+df1 <- readRDS("momo_selected_data_si2324.rds")
+df_est$defunciones_observadas <- df1$defunciones_observadas
+
+y_pstr <- df_est$y_est
+df_est <- df_est %>% select(-y_est)
+
+y_est <- c(y_pstr[1:2920], rep(NA, length(y_pstr)-2920))
+y_pred <- c(rep(NA, 2920), y_pstr[2921:length(y_pstr)])
+
+df_est$y_est <- y_est
+df_est$y_pred <- y_pred
+
+# Gràfica de dades i línia de regressió + intervals de credibilitat
+ggplot(data = df_est, aes(x = fecha_defuncion, y = defunciones_observadas)) +
+  geom_point(color = "brown3") +
+  geom_line(aes(y = y_est), color = "blue", linewidth = 1) +
+  geom_line(aes(y = y_pred), color = "green", linewidth = 1) +
+  geom_ribbon(aes(ymin = y_est_q1, ymax = y_est_q3), alpha = 0.3) +
+  labs(
+    x = "Data de Registre", 
+    y = "Nombre de Morts",
+    title = "Model de Barreja Independent",
+    subtitle = "Predicció online"
+  ) +
+  scale_x_date(date_breaks = "1 year", date_labels = "%Y") +
+  theme(
+    plot.title = element_text(face = "bold")
+  )
+```
+
+```{r}
+ggsave("grafica-mixtures-online-general.pdf", width = 10, height = 7)
+```
+
+
+```{r}
+df_detall <- df_est %>%
+  filter(year(fecha_defuncion) %in% c(2023,2024))
+
+ggplot(data = df_detall, aes(x = fecha_defuncion, y = defunciones_observadas)) +
+  geom_point(color = "brown3") +
+  geom_line(aes(y = y_est), color = "blue", linewidth = 1) +
+  geom_line(aes(y = y_pred), color = "green", linewidth = 1) +
+  geom_ribbon(aes(ymin = y_est_q1, ymax = y_est_q3), alpha = 0.3) +
+  labs(
+    x = "Data de Registre", 
+    y = "Nombre de Morts",
+    title = "Model de Barreja Independent",
+    subtitle = "Predicció online (Detall 2023-2024)"
+  ) +
+  scale_x_date(date_breaks = "2 months", date_labels = "%m/%y") +
+  theme(
+    plot.title = element_text(face = "bold")
+  )
+```
+
+```{r}
+ggsave("grafica-mixtures-online-detall.pdf", width = 10, height = 7)
+```
+
+
+### Plot HMM
+```{r}
+df_est <- readRDS("EXEC-HMM2/mcmc_pstr_hmm_y_69.rds")
+df1 <- readRDS("momo_selected_data_si2324.rds")
+df_est$defunciones_observadas <- df1$defunciones_observadas
+
+y_pstr <- df_est$y_est
+df_est <- df_est %>% select(-y_est)
+
+y_est <- c(y_pstr[1:2920], rep(NA, length(y_pstr)-2920))
+y_pred <- c(rep(NA, 2920), y_pstr[2921:length(y_pstr)])
+
+df_est$y_est <- y_est
+df_est$y_pred <- y_pred
+
+# Gràfica de dades i línia de regressió + intervals de credibilitat
+ggplot(data = df_est, aes(x = fecha_defuncion, y = defunciones_observadas)) +
+  geom_point(color = "brown3") +
+  geom_line(aes(y = y_est), color = "blue", linewidth = 1) +
+  geom_line(aes(y = y_pred), color = "green", linewidth = 1) +
+  geom_ribbon(aes(ymin = y_est_q1, ymax = y_est_q3), alpha = 0.3) +
+  labs(
+    x = "Data de Registre", 
+    y = "Nombre de Morts",
+    title = "Model Ocult de Màrkov",
+    subtitle = "Predicció online"
+  ) +
+  scale_x_date(date_breaks = "1 year", date_labels = "%Y") +
+  theme(
+    plot.title = element_text(face = "bold")
+  )
+```
+
+```{r}
+ggsave("grafica-hmm-online-general.pdf", width = 10, height = 7)
+```
+
+
+```{r}
+df_detall <- df_est %>%
+  filter(year(fecha_defuncion) %in% c(2023,2024))
+
+ggplot(data = df_detall, aes(x = fecha_defuncion, y = defunciones_observadas)) +
+  geom_point(color = "brown3") +
+  geom_line(aes(y = y_est), color = "blue", linewidth = 1) +
+  geom_line(aes(y = y_pred), color = "green", linewidth = 1) +
+  geom_ribbon(aes(ymin = y_est_q1, ymax = y_est_q3), alpha = 0.3) +
+  labs(
+    x = "Data de Registre", 
+    y = "Nombre de Morts",
+    title = "Model Ocult de Màrkov",
+    subtitle = "Predicció online (Detall 2023-2024)"
+  ) +
+  scale_x_date(date_breaks = "2 months", date_labels = "%m/%y") +
+  theme(
+    plot.title = element_text(face = "bold")
+  )
+```
+
+```{r}
+ggsave("grafica-hmm-online-detall.pdf", width = 10, height = 7)
+```
+
+
+
+
+Crear taules comparatives EQMP
+
+```{r}
+# Llegir els fitxers RDS
+temps_EQMP_setm <- readRDS("EXEC-SETMANA-2/mcmc_pstr_temps_EQMP_69.rds")
+temps_EQMP_mixt <- readRDS("EXEC-MIXTURES2/mcmc_pstr_mixt_temps_EQMP_69.rds")
+temps_EQMP_HMM <- readRDS("EXEC-HMM2/mcmc_pstr_hmm_temps_EQMP_69.rds")
+
+# Obtenir els vectors EQMP
+EQMP_setm <- temps_EQMP_setm$EQMP
+EQMP_mixt <- temps_EQMP_mixt$EQMP
+EQMP_hmm <- temps_EQMP_hmm$EQMP
+
+# Crear el data frame amb les columnes especificades
+taula_comp <- data.frame(
+  `Execució` = 1:35,
+  `Model1` = EQMP_setm[1:35],
+  `Model2` = EQMP_mixt[1:35],
+  `Model3` = EQMP_hmm[1:35],
+  `Execució-2` = 36:70,
+  `Model1-2` = c(EQMP_setm[36:69], NA),
+  `Model2-2` = c(EQMP_mixt[36:69], NA),
+  `Model3-2` = c(EQMP_hmm[36:69], NA)
+)
+
+# Carregar el paquet xtable
+library(xtable)
+
+# Convertir el data frame a taula de LaTeX
+taula_latex <- xtable(taula_comp)
+
+# Guardar la taula en format LaTeX a un fitxer .txt amb centrament i bordes
+sink("taula_comp.txt")
+print(taula_latex)
+sink()
+```
+Guardar summary HMM en taula
+
+```{r}
+# Carregar el paquet xtable
+library(xtable)
+
+summ_hmm_tab <- readRDS("EXEC-HMM2/mcmc_pstr_hmm_summ_69.rds")
+
+# Convertir el data frame a taula de LaTeX
+taula_latex1 <- xtable(summ_hmm_tab, digits=-6)
+
+# Guardar la taula en format LaTeX a un fitxer .txt amb centrament i bordes
+sink("taula_summ_HMM1.txt")
+print(taula_latex1)
+sink()
+```
+
