@@ -178,7 +178,7 @@ df1 <- dades_pstr[year(dades_pstr$fecha_defuncion) <= 2022, ]
 
 EQM <- mean((df1$defunciones_observadas - df1$y_est)^2)
 
-cat("Obtenim un error quadràtic mitjà d'adjust de EQM =", EQM)
+cat("Obtenim un error quadràtic mitjà d'ajust de EQM =", EQM)
 ```
 
 
