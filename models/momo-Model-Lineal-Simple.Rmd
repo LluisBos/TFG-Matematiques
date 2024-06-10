@@ -139,9 +139,10 @@ ggplot(data = dades_pstr, aes(x = fecha_defuncion, y = defunciones_observadas)) 
 ggsave("grafica-lineal-simple.pdf", width = 10, height = 7)
 ```
 
+## Càlcul errors quadràtics
 
 ```{r}
-# Càlcul de la MSE (EQM - Error Quadràtic Mitjà) - d'ADJUST
+# Càlcul del EQM (Error Quadràtic Mitjà) - d'adjust
 df1 <- dades_pstr[year(dades_pstr$fecha_defuncion) <= 2022, ]
 
 EQM <- mean((df1$defunciones_observadas - df1$y_est)^2)
@@ -149,13 +150,11 @@ EQM <- mean((df1$defunciones_observadas - df1$y_est)^2)
 cat("Obtenim un error quadràtic mitjà d'adjust de EQM =", EQM)
 ```
 
-
 ```{r}
-# Càlcul de la MSE (EQM - Error Quadràtic Mitjà) - de PREDICCIÓ
+# Càlcul del EQMP (Error Quadràtic Mitjà de Predicció)
 df2 <- dades_pstr[year(dades_pstr$fecha_defuncion) > 2022, ]
 
 EQMP <- mean((df2$defunciones_observadas - df2$y_pred)^2)
 
 cat("Obtenim un error quadràtic mitjà de predicció de EQMP =", EQMP)
 ```
-
