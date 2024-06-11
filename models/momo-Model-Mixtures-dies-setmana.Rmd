@@ -122,19 +122,10 @@ means_pstr <- MCMCpstr(mcmc_output, params = c("beta0", "betaL", "alphaF", "beta
 saveRDS(means_pstr, file = "means-mixtures-inits.rds")
 ```
 
-### Gràfica
+### Gràfiques
+### Gràfica amb IC
 
 ```{r}
-# Creem funció moda (valor més freqüent)
-Mode <- function(x, na.rm = FALSE) {
-  if(na.rm){
-    x = x[!is.na(x)]
-  }
-
-  ux <- unique(x)
-  return(ux[which.max(tabulate(match(x, ux)))])
-}
-
 quant1 <- function(x) {
   q1 <- quantile(x,0.025)
   return(as.numeric(q1))
@@ -184,6 +175,83 @@ ggplot(dades_pstr, aes(x = fecha_defuncion)) +
 
 ```
 
+### Gràfica amb Z diferent colors
+```{r}
+# Creem funció moda (valor més freqüent)
+Mode <- function(x, na.rm = FALSE) {
+  if(na.rm){
+    x = x[!is.na(x)]
+  }
+
+  ux <- unique(x)
+  return(ux[which.max(tabulate(match(x, ux)))])
+}
+
+betaS_est <- unlist(MCMCpstr(mcmc_output, params = "betaS"))
+Z_est <- unlist(MCMCpstr(mcmc_output, params = "Z", func = Mode))
+
+
+y0_est <- beta0_est + betaL_est*t_vect + 
+                  betaS_est[1] * dades_momo$DL + betaS_est[2] * dades_momo$DM + 
+                  betaS_est[3] * dades_momo$DX + betaS_est[4] * dades_momo$DJ + 
+                  betaS_est[5] * dades_momo$DV + betaS_est[6] * dades_momo$DS +
+                  alphaF_est[1]*cos(2*pi*yD/365) + 
+                  betaF_est[1]*sin(2*pi*yD/365) + 
+                  alphaF_est[2]*cos(4*pi*yD/365) + 
+                  betaF_est[2]*sin(4*pi*yD/365)
+
+y_up_est <- beta0_est + betaL_est*t_vect + betaM_est[1] + 
+                  betaS_est[1] * dades_momo$DL + betaS_est[2] * dades_momo$DM + 
+                  betaS_est[3] * dades_momo$DX + betaS_est[4] * dades_momo$DJ + 
+                  betaS_est[5] * dades_momo$DV + betaS_est[6] * dades_momo$DS +
+                  alphaF_est[1]*cos(2*pi*yD/365) + 
+                  betaF_est[1]*sin(2*pi*yD/365) + 
+                  alphaF_est[2]*cos(4*pi*yD/365) + 
+                  betaF_est[2]*sin(4*pi*yD/365)
+
+y_sup_up_est <- beta0_est + betaL_est*t_vect + betaM_est[1] + betaM_est[2] + 
+                  betaS_est[1] * dades_momo$DL + betaS_est[2] * dades_momo$DM + 
+                  betaS_est[3] * dades_momo$DX + betaS_est[4] * dades_momo$DJ + 
+                  betaS_est[5] * dades_momo$DV + betaS_est[6] * dades_momo$DS +
+                  alphaF_est[1]*cos(2*pi*yD/365) + 
+                  betaF_est[1]*sin(2*pi*yD/365) + 
+                  alphaF_est[2]*cos(4*pi*yD/365) + 
+                  betaF_est[2]*sin(4*pi*yD/365)
+
+dades_pstr1 <- dades_momo
+dades_pstr1$y0_est <- y0_est
+dades_pstr1$y_up_est <- y_up_est
+dades_pstr1$y_sup_up_est <- y_sup_up_est
+dades_pstr1$Z_est <- Z_est
+
+dades_pstr_NAs <- dades_pstr1 %>%
+  mutate(
+    y0_est = ifelse(Z_est != 1, NA, y0_est),
+    y_up_est = ifelse(Z_est != 2, NA, y_up_est),
+    y_sup_up_est = ifelse(Z_est != 3, NA, y_sup_up_est)
+  )
+
+ggplot(dades_pstr_NAs, aes(x = fecha_defuncion)) +
+  geom_point(aes(y = defunciones_observadas), color = "brown4") +
+  geom_line(aes(y = y0_est), color = "blue", linewidth = 0.6) +
+  geom_line(aes(y = y_up_est), color = "orange", linewidth = 0.6) +
+  geom_line(aes(y = y_sup_up_est), color = "red", linewidth = 0.6) +
+  labs(
+    x = "Data de Registre", 
+    y = "Nombre de Morts",
+    title = "Model de Barreja Independent",
+    subtitle = "Ajust dades 2015-2022"
+  ) +
+  scale_x_date(date_breaks = "1 year", date_labels = "%Y") +
+  theme(
+    plot.title = element_text(face = "bold")
+  )
+```
+
+```{r}
+ggsave("grafica-mixtures-nopred-Z.pdf", width = 10, height = 7)
+```
+
 ## Càlcul error quadràtic
 
 ```{r}
@@ -192,4 +260,6 @@ MSE <- mean((dades_pstr$defunciones_observadas - dades_pstr$y_est)^2)
 
 cat("Obtenim un error quadràtic mitjà d'ajust de EQM =", MSE)
 ```
-
+```{r}
+saveRDS(mcmc_output, "OUTPUTS/model-mixtures-Setmana-NoPred-MCMC_output.RDS")
+```
