@@ -113,7 +113,8 @@ start_time <- Sys.time()
 mcmc_output <- nimbleMCMC(codi_hmm, data = list(y = y, yDay = yD, alphas = c(1/2, 1/2, 1/2), DL = dades_momo$DL, DM = dades_momo$DM, DX = dades_momo$DX, DJ = dades_momo$DJ, DV = dades_momo$DV, DS = dades_momo$DS),
                            constants = list(piVal = pi),
                            inits = initials,
-                           monitors = c("beta0", "alphaF", "betaF", "betaL", "betaM", "betaS", "Gamma", "y_pstr"), 
+                           monitors = c("beta0", "alphaF", "betaF", "betaL", 
+                                        "betaM", "betaS", "Gamma", "Z", "y_pstr"), 
                            niter = 16000,
                            nburnin = 7500,
                            thin = 4,
@@ -149,19 +150,10 @@ means_pstr <- MCMCpstr(mcmc_output, params = c("beta0", "betaL", "alphaF", "beta
 saveRDS(means_pstr, file = "means-hmm-inits.rds")
 ```
 
-## Gràfica
+## Gràfiques
+### Gràfica amb IC
 
 ```{r}
-# Creem funció moda (valor més freqüent)
-Mode <- function(x, na.rm = FALSE) {
-  if(na.rm){
-    x = x[!is.na(x)]
-  }
-
-  ux <- unique(x)
-  return(ux[which.max(tabulate(match(x, ux)))])
-}
-
 quant1 <- function(x) {
   q1 <- quantile(x,0.025)
   return(as.numeric(q1))
@@ -211,7 +203,85 @@ ggplot(dades_pstr, aes(x = fecha_defuncion)) +
 
 ```
 
-## Càlcul erorr quadràtic
+### Gràfica amb Z diferent colors
+```{r}
+# Creem funció moda (valor més freqüent)
+Mode <- function(x, na.rm = FALSE) {
+  if(na.rm){
+    x = x[!is.na(x)]
+  }
+
+  ux <- unique(x)
+  return(ux[which.max(tabulate(match(x, ux)))])
+}
+
+betaS_est <- unlist(MCMCpstr(mcmc_output, params = "betaS"))
+Z_est <- unlist(MCMCpstr(mcmc_output, params = "Z", func = Mode))
+
+
+y0_est <- beta0_est + betaL_est*t_vect + 
+                  betaS_est[1] * dades_momo$DL + betaS_est[2] * dades_momo$DM + 
+                  betaS_est[3] * dades_momo$DX + betaS_est[4] * dades_momo$DJ + 
+                  betaS_est[5] * dades_momo$DV + betaS_est[6] * dades_momo$DS +
+                  alphaF_est[1]*cos(2*pi*yD/365) + 
+                  betaF_est[1]*sin(2*pi*yD/365) + 
+                  alphaF_est[2]*cos(4*pi*yD/365) + 
+                  betaF_est[2]*sin(4*pi*yD/365)
+
+y_up_est <- beta0_est + betaL_est*t_vect + betaM_est[1] + 
+                  betaS_est[1] * dades_momo$DL + betaS_est[2] * dades_momo$DM + 
+                  betaS_est[3] * dades_momo$DX + betaS_est[4] * dades_momo$DJ + 
+                  betaS_est[5] * dades_momo$DV + betaS_est[6] * dades_momo$DS +
+                  alphaF_est[1]*cos(2*pi*yD/365) + 
+                  betaF_est[1]*sin(2*pi*yD/365) + 
+                  alphaF_est[2]*cos(4*pi*yD/365) + 
+                  betaF_est[2]*sin(4*pi*yD/365)
+
+y_sup_up_est <- beta0_est + betaL_est*t_vect + betaM_est[1] + betaM_est[2] + 
+                  betaS_est[1] * dades_momo$DL + betaS_est[2] * dades_momo$DM + 
+                  betaS_est[3] * dades_momo$DX + betaS_est[4] * dades_momo$DJ + 
+                  betaS_est[5] * dades_momo$DV + betaS_est[6] * dades_momo$DS +
+                  alphaF_est[1]*cos(2*pi*yD/365) + 
+                  betaF_est[1]*sin(2*pi*yD/365) + 
+                  alphaF_est[2]*cos(4*pi*yD/365) + 
+                  betaF_est[2]*sin(4*pi*yD/365)
+
+dades_pstr1 <- dades_momo
+dades_pstr1$y0_est <- y0_est
+dades_pstr1$y_up_est <- y_up_est
+dades_pstr1$y_sup_up_est <- y_sup_up_est
+dades_pstr1$Z_est <- Z_est
+
+dades_pstr_NAs <- dades_pstr1 %>%
+  mutate(
+    y0_est = ifelse(Z_est != 1, NA, y0_est),
+    y_up_est = ifelse(Z_est != 2, NA, y_up_est),
+    y_sup_up_est = ifelse(Z_est != 3, NA, y_sup_up_est)
+  )
+
+ggplot(dades_pstr_NAs, aes(x = fecha_defuncion)) +
+  geom_point(aes(y = defunciones_observadas), color = "brown4") +
+  geom_line(aes(y = y0_est), color = "blue", linewidth = 0.6) +
+  geom_line(aes(y = y_up_est), color = "orange", linewidth = 0.6) +
+  geom_line(aes(y = y_sup_up_est), color = "red", linewidth = 0.6) +
+  labs(
+    x = "Data de Registre", 
+    y = "Nombre de Morts",
+    title = "Model Ocult de Màrkov",
+    subtitle = "Ajust dades 2015-2022"
+  ) +
+  scale_x_date(date_breaks = "1 year", date_labels = "%Y") +
+  theme(
+    plot.title = element_text(face = "bold")
+  )
+```
+
+```{r}
+ggsave("grafica-hmm-nopred-Z.pdf", width = 10, height = 7)
+```
+
+
+## Càlcul error quadràtic
 
 ```{r}
 # Càlcul del EQM (Error Quadràtic Mitjà) d'ajust
@@ -221,5 +291,9 @@ cat("Obtenim un error quadràtic mitjà d'ajust de EQM =", MSE)
 ```
 ```{r}
 saveRDS(mcmc_output, "MCMC-output_momo-HMM-DiesSetmana.rds")
+```
+
+```{r}
+saveRDS(mcmc_output, "OUTPUTS/model-HMM-Setmana-NoPred-MCMC_output.RDS")
 ```
 
