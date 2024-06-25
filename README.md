@@ -8,7 +8,7 @@ Aquest repositori conté el codi utilitzat en el Treball de Fi de Grau titulat "
 
 ### Carpetes Principals
 
-- **models/**: Conté els scripts per a la implementació dels models descrits en les seccions de Metodologia i Resultats del TFG.
+- **models/**: Conté els scripts per a la implementació dels models descrits en les seccions de Metodologia i Resultats del TFG, junt amb les dades emprades en format .RDS.
 - **resultats/**: Resultats obtinguts dels diferents models.
 
 ### Scripts Principals
